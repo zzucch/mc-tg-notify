@@ -1,0 +1,6 @@
+[telegram]
+bot_token = "YOUR_TOKEN"
+chat_id = YOUR_ID
+
+[server]
+ip = "YOUR_IP"
