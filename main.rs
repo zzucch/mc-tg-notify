@@ -19,6 +19,17 @@ struct Player {
     name: String,
 }
 
+#[derive(Deserialize)]
+struct TelegramConfig {
+    bot_token: String,
+    chat_id: i64,
+}
+
+#[derive(Deserialize)]
+struct ServerConfig {
+    ip: String,
+}
+
 async fn get_server_status(ip: &str) -> Result<StatusResponse, Error> {
     let url = format!("https://api.mcsrvstat.us/2/{}", ip);
     let response = reqwest::get(&url).await?.json().await?;
@@ -40,16 +51,15 @@ async fn handle_server_status(
     status: StatusResponse,
     last_result: &mut i32,
     telegram_config: &TelegramConfig,
-) {
+) -> Result<(), Error> {
     if !status.online {
         println!("Server is down.");
-        return;
+        return Ok(());
     }
 
-    let players = if let Some(players) = status.players {
-        players
-    } else {
-        return;
+    let players = match status.players {
+        Some(players) => players,
+        None => panic!("Players field must be provided when server is up"),
     };
 
     let players_online = players.online;
@@ -66,7 +76,7 @@ async fn handle_server_status(
     }
 
     if players_online == *last_result {
-        return;
+        return Ok(());
     }
 
     if *last_result != -1 && players_online > 0 {
@@ -79,26 +89,13 @@ async fn handle_server_status(
         )
         .await
         {
-            eprintln!("Failed to send message: {}", e);
+            return Err(e.into());
         }
     }
 
     *last_result = players_online;
-}
 
-fn main() {
-    let mut settings = Config::default();
-
-    settings.merge(File::with_name("config")).unwrap();
-
-    let server_config = settings.get::<ServerConfig>("server").unwrap();
-    let telegram_config = settings.get::<TelegramConfig>("telegram").unwrap();
-
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(monitor_server_status(&server_config, &telegram_config));
+    Ok(())
 }
 
 async fn monitor_server_status(server_config: &ServerConfig, telegram_config: &TelegramConfig) {
@@ -107,7 +104,11 @@ async fn monitor_server_status(server_config: &ServerConfig, telegram_config: &T
     loop {
         match get_server_status(&server_config.ip).await {
             Ok(status) => {
-                handle_server_status(status, &mut last_result, &telegram_config).await;
+                if let Err(e) =
+                    handle_server_status(status, &mut last_result, &telegram_config).await
+                {
+                    eprintln!("{}", e);
+                }
             }
             Err(e) => {
                 eprintln!("{}", e);
@@ -118,13 +119,18 @@ async fn monitor_server_status(server_config: &ServerConfig, telegram_config: &T
     }
 }
 
-#[derive(Deserialize)]
-struct TelegramConfig {
-    bot_token: String,
-    chat_id: i64,
-}
+fn main() {
+    let mut settings = Config::default();
 
-#[derive(Deserialize)]
-struct ServerConfig {
-    ip: String,
+    settings.merge(File::with_name("config")).unwrap();
+
+    let server_config = settings.get::<ServerConfig>("server").unwrap();
+    let telegram_config = settings.get::<TelegramConfig>("telegram").unwrap();
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+    runtime.block_on(monitor_server_status(&server_config, &telegram_config));
 }
