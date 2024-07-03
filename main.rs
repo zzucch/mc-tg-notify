@@ -4,7 +4,8 @@ use serde::Deserialize;
 
 #[derive(Deserialize)]
 struct StatusResponse {
-    players: Players,
+    online: bool,
+    players: Option<Players>,
 }
 
 #[derive(Deserialize)]
@@ -40,9 +41,19 @@ async fn handle_server_status(
     last_result: &mut i32,
     telegram_config: &TelegramConfig,
 ) {
-    let players_online = status.players.online;
-    let player_names: Vec<String> = status
-        .players
+    if !status.online {
+        println!("Server is down.");
+        return;
+    }
+
+    let players = if let Some(players) = status.players {
+        players
+    } else {
+        return;
+    };
+
+    let players_online = players.online;
+    let player_names: Vec<String> = players
         .sample
         .unwrap_or_default()
         .into_iter()
@@ -50,7 +61,7 @@ async fn handle_server_status(
         .collect();
 
     println!("Players online: {}", players_online);
-    if player_names.len() > 0 {
+    if !player_names.is_empty() {
         println!("Player names: {:?}", player_names);
     }
 
