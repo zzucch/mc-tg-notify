@@ -1,4 +1,5 @@
 use config::{Config, File};
+use log::error;
 use reqwest::Error;
 use serde::Deserialize;
 
@@ -107,11 +108,11 @@ async fn monitor_server_status(server_config: &ServerConfig, telegram_config: &T
                 if let Err(e) =
                     handle_server_status(status, &mut last_result, &telegram_config).await
                 {
-                    eprintln!("{}", e);
+                    error!("{}", e);
                 }
             }
             Err(e) => {
-                eprintln!("{}", e);
+                error!("{}", e);
             }
         }
 
@@ -120,8 +121,9 @@ async fn monitor_server_status(server_config: &ServerConfig, telegram_config: &T
 }
 
 fn main() {
-    let mut settings = Config::default();
+    env_logger::init();
 
+    let mut settings = Config::default();
     settings.merge(File::with_name("config")).unwrap();
 
     let server_config = settings.get::<ServerConfig>("server").unwrap();
